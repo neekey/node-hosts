@@ -2,7 +2,7 @@
 
 A handy tool to manager your hosts within terminal ( For now, only works for Mac & Linux ).
 
-![2013-10-04 1 31 01](https://f.cloud.github.com/assets/499870/1267401/c2f6bb74-2cb9-11e3-9a61-ad6bfad24f23.png)
+![2013-10-05 12 32 34](https://f.cloud.github.com/assets/499870/1270963/c98642c6-2d12-11e3-88d0-b149e84efed7.png)
 
 -------
 
@@ -20,6 +20,6 @@ Still working on it, any issues or distributes are welcome.
 
 ## TODO
 
-- ~Simple sync function using Parse.com.~
+- ✔ Simple sync function using Parse.com.
 - Compatible with windows.
 - Reset user password.
