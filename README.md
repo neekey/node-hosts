@@ -2,6 +2,8 @@
 
 A handy tool to manager your hosts within terminal.
 
+![2013-10-04 1 31 01](https://f.cloud.github.com/assets/499870/1267401/c2f6bb74-2cb9-11e3-9a61-ad6bfad24f23.png)
+
 -------
 
 ## Install
