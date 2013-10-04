@@ -2,6 +2,7 @@
 var inquirer = require( 'inquirer' );
 var Utils = require( '../lib/utils' );
 var Chalk = require( 'chalk' );
+var _ = require( 'underscore' );
 
 var Prompt = {
 
@@ -20,13 +21,27 @@ var Prompt = {
             type: 'list',
             name: 'action',
             message: '请选择操作项：',
-            choices: [
-                '设置组开关',
-                '创建组',
-                '添加新规则',
-                '编辑组',
-                '结束'
-            ]
+            choices: function(){
+                var choice = [
+                    '设置组开关',
+                    '创建组',
+                    '添加新规则',
+                    '编辑组',
+                ];
+
+                var user = Utils.current();
+
+                if( user ){
+                    choice = choice.concat( [ '注销' ] );
+                }
+                else {
+                    choice = choice.concat( [ '登录', '注册' ] );
+                }
+
+                choice.push( '结束' );
+
+                return choice;
+            }
         }], function( answers ) {
 
             switch( answers.action ){
@@ -44,6 +59,18 @@ var Prompt = {
                 }
                 case '编辑组': {
                     self.editGroups( 'main' );
+                    break;
+                }
+                case '登录': {
+                    self.login();
+                    break;
+                }
+                case '注册': {
+                    self.signUp();
+                    break;
+                }
+                case '注销': {
+                    self.logout();
                     break;
                 }
                 case '结束': {
@@ -69,7 +96,7 @@ var Prompt = {
             validate: function( name ){
 
                 if( name ){
-                    var targetGroup = Utils.getGroupByName( Groups, name );
+                    var targetGroup = Groups[ name ];
 
                     if( targetGroup ){
                         return Chalk.yellow( '分组 ') + Chalk.white( name ) + Chalk.yellow( ' 已经存在' );
@@ -85,12 +112,8 @@ var Prompt = {
         }], function( answers ) {
 
             var groupName = answers.name;
-            Groups.push({
-                name: groupName,
-                hosts: []
-            });
 
-            Utils.write( Groups, function(){
+            Utils.addGroup( groupName, function( err ){
                 console.log(Chalk.green( '\n创建新的组成功：' ) + Chalk.white( groupName ) + '\n' );
 
                 inquirer.prompt([{
@@ -122,7 +145,7 @@ var Prompt = {
             type: 'list',
             name: 'name',
             message: '需要添加规则到分组：',
-            choices: Groups.concat( [ new inquirer.Separator(), self._BACK ] )
+            choices: _.keys( Groups ).concat( [ new inquirer.Separator(), self._BACK ] )
         }], function( answers ) {
 
             var groupName = answers.name;
@@ -141,9 +164,7 @@ var Prompt = {
      */
     addRuleToGroup: function( groupName ){
 
-        var Groups = Utils.read().groups;
         var self = this;
-        var targetGroup = Utils.getGroupByName( Groups, groupName );
 
         inquirer.prompt([
             {
@@ -187,11 +208,8 @@ var Prompt = {
                 }
             }
         ], function( answers ) {
-            targetGroup.hosts.push({
-                ip: answers.ip,
-                domain: answers.domain
-            });
-            Utils.write( Groups, function(){
+
+            Utils.addRule( groupName, answers.ip, answers.domain, function(){
                 console.log(Chalk.green( '\n添加：' ) + Chalk.white( answers.domain ) + ' ➜ ' + Chalk.white( answers.ip ) + Chalk.green( ' 到 ' + groupName + '成功!\n' ) );
 
                 inquirer.prompt([{
@@ -207,7 +225,7 @@ var Prompt = {
                         self.main();
                     }
                 });
-            });
+            })
         });
     },
 
@@ -228,9 +246,9 @@ var Prompt = {
             message: '组列表，调整启用：',
             choices: function(){
                 var choices = [];
-                Groups.forEach(function( group ){
+                _.each( Groups, function( group, name ){
                     choices.push({
-                        name: group.name,
+                        name: name,
                         checked: group.active == true
                     });
                 });
@@ -239,8 +257,8 @@ var Prompt = {
             }
         }], function( answers ) {
 
-            Groups.forEach(function( group ){
-                group.active = answers.active.indexOf(group.name) >= 0;
+            _.each( Groups, function( group, name ){
+                group.active = answers.active.indexOf( name ) >= 0;
             });
 
             Utils.write( Groups, function(){
@@ -254,7 +272,7 @@ var Prompt = {
      * 编辑群组
      * @param from
      */
-    editGroups: function( from ){
+    editGroups: function(){
 
         this.showGroups();
 
@@ -266,7 +284,7 @@ var Prompt = {
                 type: 'list',
                 name: 'name',
                 message: '选择要编辑的分组：',
-                choices: Groups.concat( [ new inquirer.Separator(), self._BACK ] )
+                choices: _.keys( Groups ).concat( [ new inquirer.Separator(), self._BACK ] )
             },
             {
                 type: 'list',
@@ -290,19 +308,12 @@ var Prompt = {
                     self.editRules( groupName );
                 }
                 else if( action == '删除' ) {
-                    var index = null
 
-                    Groups.forEach( function( group, i ){
-                        if( group.name == groupName ){
-                            index = i;
-                        }
-                    });
-                    Groups.splice( index, 1 );
-
-                    Utils.write( Groups, function(){
+                    Utils.removeGroup( groupName, function(){
                         console.log( Chalk.green( '\n删除分组成功\n' ) );
                         self.editGroups();
-                    });
+
+                    })
                 }
                 else {
                     self.editGroups();
@@ -318,7 +329,7 @@ var Prompt = {
     editRules: function( groupName ){
 
         var Groups = Utils.read().groups;
-        var targetGroup = Utils.getGroupByName( Groups, groupName );
+        var targetGroup = Groups[ groupName ];
         var self = this;
 
         inquirer.prompt([
@@ -355,22 +366,134 @@ var Prompt = {
         });
     },
 
+    signUp: function(){
+
+        var password = null;
+        var self = this;
+
+        inquirer.prompt([
+            {
+                type: 'input',
+                name: 'email',
+                message: '邮箱地址：',
+                validate: function(){ return true }
+            },
+            {
+                type: 'password',
+                name: 'password',
+                message: '密码：',
+                validate: function( p ){
+                    if( p.length < 6 ){
+                        return '密码不能少于6位';
+                    }
+                    else {
+                        password = p;
+                        return true;
+                    }
+                }
+            },
+            {
+                type: 'password',
+                name: 'passwordConfirm',
+                message: '密码确认：',
+                validate: function( p ){
+                    if( p != password ){
+                        return '两次属于密码不一致，请再次确认';
+                    }
+                    else {
+                        return true;
+                    }
+                }
+            }
+        ], function( answers ){
+            Utils.signUp( answers.email, answers.password, function( error ){
+                if( error ){
+                    console.log( Chalk.red( '注册失败, ERROR: '), error );
+                }
+                else {
+                    console.log( Chalk.green( '注册成功!' ) );
+                    self.main();
+                }
+            });
+        });
+    },
+
+    login: function(){
+
+        var self = this;
+        inquirer.prompt([
+            {
+                type: 'input',
+                name: 'email',
+                message: '邮箱地址：'
+            },
+            {
+                type: 'password',
+                name: 'password',
+                message: '密码：'
+            }
+        ], function( answers ){
+            Utils.login( answers.email, answers.password, function( error ){
+                if( error ){
+                    console.log( Chalk.red( '登录失败, ERROR: '), error );
+                }
+                else {
+                    console.log( Chalk.green( '登录成功!' ) );
+                    self.main();
+                }
+            });
+        });
+    },
+
+    logout: function(){
+
+        Utils.logout();
+        console.log( Chalk.green( '\n注销成功!\n' ) );
+        this.main();
+    },
+
     /**
      * 展示群组列表
      */
     showGroups: function(){
 
+        var user = Utils.current();
         var Groups = Utils.read().groups;
-        console.log( Chalk.blue( '\n----------------------------------' ) );
-        console.log( Chalk.gray( '\n组列表(' + Groups.length + ')\n') );
-        Groups.forEach(function( group, index ){
-            console.log( Chalk[ group.active ? 'yellow' : 'grey' ]( ( group.active ? '◉' : '◎' ) + '  ' ) + Chalk[ group.active ? 'white' : 'grey' ]( group.name ) + ' ' + Chalk.gray( group.hosts.length + 'Rules' ) + ( index == Groups.length - 1 ? '\n' : '' ) );
+        console.log( Chalk.blue( '\n---------------------------------' ) );
+        if( user ){
+            console.log( Chalk.grey('( 登录为: ' + user.get( 'username' ) + ' )') );
+        }
+        console.log( Chalk.white.underline( '\n组列表(' + _.keys( Groups ).length + ')\n') );
+        _.each( Groups, function( group, name ){
+            console.log( ' ' + Chalk[ group.active ? 'yellow' : 'grey' ]( ( group.active ? '◉' : '◎' ) + '  ' ) + Chalk[ group.active ? 'white' : 'grey' ]( name ) + Chalk.gray( ' (' + group.hosts.length + ')' ) );
         });
         console.log( Chalk.blue( '----------------------------------\n' ) );
     }
 };
 
-Prompt.main();
+/**
+ * If logged in, then fetch right after the start.
+ */
+
+if( Utils.current() ){
+
+    console.log( Chalk.yellow( '\n同步服务器数据...' ) );
+    Utils.fetch( function( error, groups ){
+        if( !error ){
+            Utils.write( Utils.dataHandle( Utils.read().groups, groups ), function(){
+                console.log( Chalk.green( '\n数据同步成功...' ) );
+                Prompt.main();
+            });
+        }
+        else {
+            console.log( Chalk.red( '\n获取数据失败，但您可以继续使用本地数据.\n' ) );
+            Prompt.main();
+        }
+    });
+}
+else {
+    Prompt.main();
+}
 
 
 
