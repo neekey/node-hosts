@@ -10,7 +10,6 @@ A handy tool to manager your hosts within terminal.
 
 ```
 $ sudo npm install node-hosts -g
-
 ```
 
 After installation, just type `ho` to start.
