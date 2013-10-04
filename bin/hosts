@@ -1,0 +1,376 @@
+#!/usr/bin/env node
+var inquirer = require( 'inquirer' );
+var Utils = require( '../lib/utils' );
+var Chalk = require( 'chalk' );
+
+var Prompt = {
+
+    _BACK: '↩ 返回',
+
+    /**
+     * 主菜单
+     */
+    main: function(){
+
+        var self = this;
+
+        this.showGroups();
+
+        inquirer.prompt([{
+            type: 'list',
+            name: 'action',
+            message: '请选择操作项：',
+            choices: [
+                '设置组开关',
+                '创建组',
+                '添加新规则',
+                '编辑组',
+                '结束'
+            ]
+        }], function( answers ) {
+
+            switch( answers.action ){
+                case '创建组': {
+                    self.addGroup( 'main' );
+                    break;
+                }
+                case '添加新规则': {
+                    self.addRule( 'main' );
+                    break;
+                }
+                case '设置组开关': {
+                    self.toggleGroups( 'main' );
+                    break;
+                }
+                case '编辑组': {
+                    self.editGroups( 'main' );
+                    break;
+                }
+                case '结束': {
+                    process.exit(1);
+                }
+            }
+        });
+    },
+
+    /**
+     * 添加新的群组
+     * @param from
+     */
+    addGroup: function( from ){
+
+        var Groups = Utils.read().groups;
+        var self = this;
+
+        inquirer.prompt([{
+            type: 'input',
+            name: 'name',
+            message: '分组名称：',
+            validate: function( name ){
+
+                if( name ){
+                    var targetGroup = Utils.getGroupByName( Groups, name );
+
+                    if( targetGroup ){
+                        return Chalk.yellow( '分组 ') + Chalk.white( name ) + Chalk.yellow( ' 已经存在' );
+                    }
+                    else {
+                        return true;
+                    }
+                }
+                else {
+                    return Chalk.yellow( '分组名不能为空' );
+                }
+            }
+        }], function( answers ) {
+
+            var groupName = answers.name;
+            Groups.push({
+                name: groupName,
+                hosts: []
+            });
+
+            Utils.write( Groups, function(){
+                console.log(Chalk.green( '\n创建新的组成功：' ) + Chalk.white( groupName ) + '\n' );
+
+                inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'continue',
+                    message: '是否继续添加规则到 ' + groupName + '：'
+                }], function( answers ){
+
+                    if( answers.continue ){
+                        self.addRuleToGroup( groupName );
+                    }
+                    else {
+                        self.main();
+                    }
+                });
+            });
+        });
+    },
+
+    /**
+     * 添加规则
+     */
+    addRule: function(  ){
+
+        var Groups = Utils.read().groups;
+        var self = this;
+
+        inquirer.prompt([{
+            type: 'list',
+            name: 'name',
+            message: '需要添加规则到分组：',
+            choices: Groups.concat( [ new inquirer.Separator(), self._BACK ] )
+        }], function( answers ) {
+
+            var groupName = answers.name;
+            if( groupName == self._BACK ){
+                self.main();
+            }
+            else {
+                self.addRuleToGroup( groupName );
+            }
+        });
+    },
+
+    /**
+     * 向指定群组中添加规则
+     * @param groupName
+     */
+    addRuleToGroup: function( groupName ){
+
+        var Groups = Utils.read().groups;
+        var self = this;
+        var targetGroup = Utils.getGroupByName( Groups, groupName );
+
+        inquirer.prompt([
+            {
+                type: 'input',
+                name: 'domain',
+                message: '域名：',
+                validate: function( domain ){
+
+                    if( domain ){
+                        return true;
+                    }
+                    else {
+                        return Chalk.yellow( '域名不能为空' );
+                    }
+                }
+            },
+            {
+                type: 'input',
+                name: 'ip',
+                message: 'IP：',
+                validate: function( IP ){
+
+                    if( IP ){
+                        var EX = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
+                        var ret = EX.exec( IP );
+                        if( ret &&
+                            ret[ 1 ] <= 255 &&
+                            ret[ 2 ] <= 255 &&
+                            ret[ 3 ] <= 255 &&
+                            ret[ 4 ] <= 255 ){
+
+                            return true;
+                        }
+                        else {
+                            return Chalk.yellow( 'IP格式有误' );
+                        }
+                    }
+                    else {
+                        return Chalk.yellow( 'IP不能为空' );
+                    }
+                }
+            }
+        ], function( answers ) {
+            targetGroup.hosts.push({
+                ip: answers.ip,
+                domain: answers.domain
+            });
+            Utils.write( Groups, function(){
+                console.log(Chalk.green( '\n添加：' ) + Chalk.white( answers.domain ) + ' ➜ ' + Chalk.white( answers.ip ) + Chalk.green( ' 到 ' + groupName + '成功!\n' ) );
+
+                inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'continue',
+                    message: '是否继续添加规则到 ' + groupName + '：'
+                }], function( answers ){
+
+                    if( answers.continue ){
+                        self.addRuleToGroup( groupName );
+                    }
+                    else {
+                        self.main();
+                    }
+                });
+            });
+        });
+    },
+
+    /**
+     * 设置群组的启用状态
+     * @param from
+     */
+    toggleGroups: function( from ){
+
+        this.showGroups();
+
+        var Groups = Utils.read().groups;
+        var self = this;
+
+        inquirer.prompt([{
+            type: 'checkbox',
+            name: 'active',
+            message: '组列表，调整启用：',
+            choices: function(){
+                var choices = [];
+                Groups.forEach(function( group ){
+                    choices.push({
+                        name: group.name,
+                        checked: group.active == true
+                    });
+                });
+
+                return choices;
+            }
+        }], function( answers ) {
+
+            Groups.forEach(function( group ){
+                group.active = answers.active.indexOf(group.name) >= 0;
+            });
+
+            Utils.write( Groups, function(){
+                console.log( Chalk.green( '\n设置启用状态成功\n' ) );
+                self[ from ]();
+            });
+        });
+    },
+
+    /**
+     * 编辑群组
+     * @param from
+     */
+    editGroups: function( from ){
+
+        this.showGroups();
+
+        var Groups = Utils.read().groups;
+        var self = this;
+
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'name',
+                message: '选择要编辑的分组：',
+                choices: Groups.concat( [ new inquirer.Separator(), self._BACK ] )
+            },
+            {
+                type: 'list',
+                name: 'action',
+                message: '对该分组进行..',
+                choices: [ '编辑', '删除', new inquirer.Separator(), self._BACK ],
+                when: function( answers ){
+                    return answers.name != self._BACK;
+                }
+            }
+        ], function( answers ) {
+
+            var groupName = answers.name;
+            var action = answers.action;
+
+            if( groupName == self._BACK ){
+                self.main();
+            }
+            else {
+                if( action == '编辑' ){
+                    self.editRules( groupName );
+                }
+                else if( action == '删除' ) {
+                    var index = null
+
+                    Groups.forEach( function( group, i ){
+                        if( group.name == groupName ){
+                            index = i;
+                        }
+                    });
+                    Groups.splice( index, 1 );
+
+                    Utils.write( Groups, function(){
+                        console.log( Chalk.green( '\n删除分组成功\n' ) );
+                        self.editGroups();
+                    });
+                }
+                else {
+                    self.editGroups();
+                }
+            }
+        });
+    },
+
+    /**
+     * 编辑指定群组中的规则
+     * @param groupName
+     */
+    editRules: function( groupName ){
+
+        var Groups = Utils.read().groups;
+        var targetGroup = Utils.getGroupByName( Groups, groupName );
+        var self = this;
+
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'host',
+                message: '选择删除的规则：',
+                choices: function(){
+                    var choices = [];
+                    targetGroup.hosts.forEach(function( host, index ){
+                        choices.push( index + ': ' + host.ip + ' ➜ ' + host.domain );
+                    });
+
+                    choices.push( new inquirer.Separator(), self._BACK );
+
+                    return choices;
+                }
+            }
+        ], function( answers ) {
+
+            var index = answers.host.substring( 0, answers.host.indexOf( ':' ) );
+
+            if( answers.host == self._BACK ){
+                self.main();
+            }
+            else {
+                targetGroup.hosts.splice( index, 1 );
+
+                Utils.write( Groups, function(){
+                    console.log( Chalk.green( '\n删除规则成功\n' ) );
+                    self.editRules( groupName );
+                });
+            }
+        });
+    },
+
+    /**
+     * 展示群组列表
+     */
+    showGroups: function(){
+
+        var Groups = Utils.read().groups;
+        console.log( Chalk.blue( '\n----------------------------------' ) );
+        console.log( Chalk.gray( '\n组列表(' + Groups.length + ')\n') );
+        Groups.forEach(function( group, index ){
+            console.log( Chalk[ group.active ? 'yellow' : 'grey' ]( ( group.active ? '◉' : '◎' ) + '  ' ) + Chalk[ group.active ? 'white' : 'grey' ]( group.name ) + ' ' + Chalk.gray( group.hosts.length + 'Rules' ) + ( index == Groups.length - 1 ? '\n' : '' ) );
+        });
+        console.log( Chalk.blue( '----------------------------------\n' ) );
+    }
+};
+
+Prompt.main();
+
+
+

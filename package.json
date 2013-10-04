@@ -1,0 +1,26 @@
+{
+  "name": "node-hosts",
+  "version": "0.0.1",
+  "description": "A handy tool to manager your hosts.",
+  "main": "index.js",
+  "scripts": {
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/neekey/node-hosts"
+  },
+  "bin": { "ho": "./bin/hosts" },
+  "keywords": [
+    "hosts",
+    "manager"
+  ],
+  "author": "neekey",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/neekey/node-hosts/issues"
+  },
+  "dependencies": {
+    "chalk": "~0.2.1",
+    "inquirer": "~0.3.3"
+  }
+}
